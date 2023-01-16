@@ -123,6 +123,7 @@ QualitySettings:
     Nintendo Switch: 1
     PS4: 1
     PSP2: 0
+    Server: 0
     Standalone: 2
     WebGL: 0
     Windows Store Apps: 1
