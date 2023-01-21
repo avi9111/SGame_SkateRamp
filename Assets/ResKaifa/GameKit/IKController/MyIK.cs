@@ -2,6 +2,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Cinemachine;
+using EasyButtons;
+using FluffyUnderware.Curvy;
+using FluffyUnderware.Curvy.Controllers;
 using KinematicCharacterController;
 using KinematicCharacterController.Examples;
 using ResKaifa.GameKit;
@@ -28,7 +32,10 @@ public partial class MyIK : MonoBehaviour,ICharacterController
     //     Up,
     //     GroundOutterNormal
     // }
-    public bool isGroundUpdating;
+    
+    public bool debugLog = false;
+    [NonSerialized]
+    public bool isGroundUpdating;//更新路径（Gizmos用）
 
     // public enum OrientationMethod
     // {
@@ -36,10 +43,14 @@ public partial class MyIK : MonoBehaviour,ICharacterController
     //     TowardsMovement,
     // }
     public Vector3 position => Motor.transform.position;
+    [Header("这个Motor会自动填充")]
     public KinematicCharacterMotor Motor;
+    [NonSerialized]
     public Vector3 _moveInputVector;
     private Vector3 _lookInputVector;
+    [NonSerialized]
     public Vector3 Gravity = new Vector3(0, ASkateConst.GravitySensive, 0);
+    [NonSerialized]
     public Vector3 GravityInSlide =  new Vector3(0, ASkateConst.GravitySensive, 0) * 3;
     /// <summary>
     /// 真正决定“平地"移动速度的参数
@@ -81,71 +92,21 @@ public partial class MyIK : MonoBehaviour,ICharacterController
     public float OrientationSharpness = 10f;
     public BonusOrientationMethod BonusOrientationMethod = BonusOrientationMethod.None;
     public float BonusOrientationSharpness = 10f;
-
-        // public WhileOnAirMode OnAirRotateMode;
-
-  //  [Range(0.8f,1)]
-//    public float OrientationFlyFixed = 0.92f;
-
-    //public float OrientationFlyFixedAngle = 10f;
-
+    
+    
     public float RevertCamVelocityCap = 0.09f;
     /// <summary>
     /// 到了最高点，翻转镜头用
     /// </summary>
     public bool RevertCamTrigger = false;
-    // //滑板速度
-    // //private bool skateSpeedConsumed = false;
-    // private Vector3 skateSpeedLastVelocity;
-    // private Vector3 skateSpeedLastMoveRight;
-    //public CharacterState CurrentCharacterState { get; private set; }
-    [Header("二次开发，采用 Skate 的移动状态")]
-    public CharacterState CurrentCharacterState ;//TODO:去掉。。。
-    
-    public bool debugLog = false;
-    
-    /// <summary>
-    /// //////////////////////// Debg 变量 //////////////////////////////////////////
-    /// </summary>
-    //private Vector3 _logCurrentVelocity;
-    // /// <summary>
-    // /// 现在应该，没用了，这个参数
-    // /// </summary>
-    // private Vector3 _logFixedVelocity;
-    /// <summary>
-    /// 离地的角度修复（PostGround 时设为 true，UpdateVelocity()时只使用一次
-    /// </summary>
-    public bool _logFixedConsumed = true;
-    /// <summary>
-    /// 落地时保证速度                   
-    /// </summary>
-    public bool _logFixGroundedConsumed = true;
+    //[Header("二次开发，采用 Skate 的移动状态")]
+    //public CharacterState CurrentCharacterState ;//TODO:去掉。。。
 
-    // //public Vector3 _logSpeedTangentCurr;
-    // /// <summary>
-    // /// 打印
-    // /// </summary>
-    // public Vector3 _logSpeedTangent;
-    // public Vector3 _logSpeedTangentPrev;
-    // /// <summary>
-    // /// 记录修正速度？？（OnAir 的过程），同样忘了有什么作用。。。。
-    // /// </summary>
-    // public Vector3 _logSpeedFixMoment;
-    // /// <summary>
-    // /// 记录上升平面的投影，忘了怎么用了。。。
-    // /// </summary>
-    // public Vector3 _logSpeedProjection;
-    // /// <summary>
-    // /// 离地时接触点
-    // /// </summary>
-    // public Vector3? _logSpeedMotorPosition;
-    // /// <summary>
-    // /// 离地时上一个状态点
-    // /// </summary>
-    // public  Vector3? _logSpeedLastGroundPos;
-    // public Vector3 _logSpeedGroundInner;
-    // public Vector3 _logSpeedGroundOutter;
-    // public CharacterGroundingReport? _logSpeedGround;
+
+
+    /// <summary>
+    /// TODO:这个数组 Paths 现在没有输出
+    /// </summary>
     public List<Vector3> onAirPaths;
     [Tooltip("认为，已停止的速度值")]
     public float groundAudioStopInterval = 0.2f;
@@ -162,8 +123,19 @@ public partial class MyIK : MonoBehaviour,ICharacterController
     [Header("必须设置主角动画")]
     public Animator _animator;
 
-    private VecBase _vecHandle;
-    
+    public VecBase _vecHandle;
+    [NonSerialized]
+    public bool _showCurrVelocity;
+    [NonSerialized]
+    public bool _showCurrVelocityPillar = true;
+    [NonSerialized]
+    public bool _useMegant = true;
+    // [Button]//应该实现了Editor，有冲突，所以不能用 【Button】了
+    // public void ShowCurrVeclocityGizmos()
+    // {
+    //     _showCurrVelocity = !_showCurrVelocity;
+    // }
+
     private void Start()
     {
         InitGizmos();
@@ -175,6 +147,7 @@ public partial class MyIK : MonoBehaviour,ICharacterController
         
         Motor = GetComponent<KinematicCharacterMotor>();
         Motor.CharacterController = this;
+        Motor.CharacterTempMyIK = this;
         Debug.Log("[Init] Motor.CharacterController Done");
 
         #region FSM of Player
@@ -239,85 +212,98 @@ public partial class MyIK : MonoBehaviour,ICharacterController
 
     public void UpdateRotation(ref Quaternion currentRotation, float deltaTime)
     {
-        if(debugLog) Debug.LogWarning("UpdateRotation");
+      //  var rot = currentRotation
+      //if(debugLog) Debug.LogWarning("UpdateRotation");
       //  if (fsm.IsState("Dead")) return;
-        switch (CurrentCharacterState)
+     
+        if (_lookInputVector.sqrMagnitude > 0f && OrientationSharpness > 0f)
         {
-            case CharacterState.Skate:
-            case CharacterState.Default:
-                {
-                    if (_lookInputVector.sqrMagnitude > 0f && OrientationSharpness > 0f)
-                    {
-                        // Smoothly interpolate from current to target look direction
-                        Vector3 smoothedLookInputDirection = Vector3.Slerp(Motor.CharacterForward, _lookInputVector, 1 - Mathf.Exp(-OrientationSharpness * deltaTime)).normalized;
-        
-                        // Set the current rotation (which will be used by the KinematicCharacterMotor)
-                        currentRotation = Quaternion.LookRotation(smoothedLookInputDirection, Motor.CharacterUp);
-                    }
-        
-                    Vector3 currentUp = (currentRotation * Vector3.up);
-                    if (BonusOrientationMethod == BonusOrientationMethod.TowardsGravity)
-                    {
-                        // Rotate from current up to invert gravity
-                        Vector3 smoothedGravityDir = Vector3.Slerp(currentUp, -Gravity.normalized, 1 - Mathf.Exp(-BonusOrientationSharpness * deltaTime));
-                        currentRotation = Quaternion.FromToRotation(currentUp, smoothedGravityDir) * currentRotation;
-                    }
-                    else if (BonusOrientationMethod == BonusOrientationMethod.TowardsGroundSlopeAndGravity)
-                    {
-                        if (Motor.GroundingStatus.IsStableOnGround)
-                        {
-                            Vector3 initialCharacterBottomHemiCenter = Motor.TransientPosition + (currentUp * Motor.Capsule.radius);
-        
-                            Vector3 smoothedGroundNormal = Vector3.Slerp(Motor.CharacterUp, Motor.GroundingStatus.GroundNormal, 1 - Mathf.Exp(-BonusOrientationSharpness * deltaTime));
-                            currentRotation = Quaternion.FromToRotation(currentUp, smoothedGroundNormal) * currentRotation;
-        
-                            // Move the position to create a rotation around the bottom hemi center instead of around the pivot
-                            Motor.SetTransientPosition(initialCharacterBottomHemiCenter + (currentRotation * Vector3.down * Motor.Capsule.radius));
-                        }
-                        else
-                        {
-                            Vector3 smoothedGravityDir = Vector3.Slerp(currentUp, -Gravity.normalized, 1 - Mathf.Exp(-BonusOrientationSharpness * deltaTime));
-                            currentRotation = Quaternion.FromToRotation(currentUp, smoothedGravityDir) * currentRotation;
-                        }
-                    }
-                    else if (BonusOrientationMethod == BonusOrientationMethod.SkateAndAir)
-                    {
-                        if (Motor.GroundingStatus.IsStableOnGround)
-                        {
-                            DoRotateInGround(ref currentRotation, currentUp,deltaTime);
-//                            Debug.LogError("motor <color=gray>velocity=" + Motor.Velocity.sqrMagnitude + "</color>");
-                        }
-                        else
-                        {
-  //                          Debug.LogError("motor velocity=" + Motor.Velocity.sqrMagnitude);
-                            if (RevertCamTrigger && Motor.Velocity.sqrMagnitude < RevertCamVelocityCap)
-                            {
-                                //Debug.LogWarning("判断人是否有旋转 motor rotate");
-                                currentRotation = Quaternion.LookRotation(new Vector3(0, -1, 0), Motor.CharacterUp);
-                                RevertCamTrigger = false;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Vector3 smoothedGravityDir = Vector3.Slerp(currentUp, Vector3.up, 1 - Mathf.Exp(-BonusOrientationSharpness * deltaTime));
-                        currentRotation = Quaternion.FromToRotation(currentUp, smoothedGravityDir) * currentRotation;
-                    }
-                    break;
-                }
+            // Smoothly interpolate from current to target look direction
+            Vector3 smoothedLookInputDirection = Vector3.Slerp(Motor.CharacterForward, _lookInputVector, 1 - Mathf.Exp(-OrientationSharpness * deltaTime)).normalized;
+
+            // Set the current rotation (which will be used by the KinematicCharacterMotor)
+            currentRotation = Quaternion.LookRotation(smoothedLookInputDirection, Motor.CharacterUp);
         }
+
+        Vector3 currentUp = (currentRotation * Vector3.up);
+        if (BonusOrientationMethod == BonusOrientationMethod.TowardsGravity)
+        {
+            // Rotate from current up to invert gravity
+            Vector3 smoothedGravityDir = Vector3.Slerp(currentUp, -Gravity.normalized, 1 - Mathf.Exp(-BonusOrientationSharpness * deltaTime));
+            currentRotation = Quaternion.FromToRotation(currentUp, smoothedGravityDir) * currentRotation;
+        }
+        else if (BonusOrientationMethod == BonusOrientationMethod.TowardsGroundSlopeAndGravity)
+        {
+            if (Motor.GroundingStatus.IsStableOnGround)
+            {
+                Vector3 initialCharacterBottomHemiCenter = Motor.TransientPosition + (currentUp * Motor.Capsule.radius);
+
+                Vector3 smoothedGroundNormal = Vector3.Slerp(Motor.CharacterUp, Motor.GroundingStatus.GroundNormal, 1 - Mathf.Exp(-BonusOrientationSharpness * deltaTime));
+                currentRotation = Quaternion.FromToRotation(currentUp, smoothedGroundNormal) * currentRotation;
+
+                // Move the position to create a rotation around the bottom hemi center instead of around the pivot
+                Motor.SetTransientPosition(initialCharacterBottomHemiCenter + (currentRotation * Vector3.down * Motor.Capsule.radius));
+            }
+            else
+            {
+                Vector3 smoothedGravityDir = Vector3.Slerp(currentUp, -Gravity.normalized, 1 - Mathf.Exp(-BonusOrientationSharpness * deltaTime));
+                currentRotation = Quaternion.FromToRotation(currentUp, smoothedGravityDir) * currentRotation;
+            }
+        }
+        else if (BonusOrientationMethod == BonusOrientationMethod.SkateAndAir)
+        {
+            if (Motor.GroundingStatus.IsStableOnGround)
+            {
+                DoRotateInGround(ref currentRotation, currentUp,deltaTime);
+//                            Debug.LogError("motor <color=gray>velocity=" + Motor.Velocity.sqrMagnitude + "</color>");
+            }
+            else
+            {
+//                          Debug.LogError("motor velocity=" + Motor.Velocity.sqrMagnitude);
+                if (RevertCamTrigger && Motor.Velocity.sqrMagnitude < RevertCamVelocityCap)
+                {
+                    //Debug.LogWarning("判断人是否有旋转 motor rotate");
+                    currentRotation = Quaternion.LookRotation(new Vector3(0, -1, 0), Motor.CharacterUp);
+                    RevertCamTrigger = false;
+                }
+            }
+        }
+        else
+        {
+            Vector3 smoothedGravityDir = Vector3.Slerp(currentUp, Vector3.up, 1 - Mathf.Exp(-BonusOrientationSharpness * deltaTime));
+            currentRotation = Quaternion.FromToRotation(currentUp, smoothedGravityDir) * currentRotation;
+        }
+       
+
+        // if (rot != currentRotation)
+        // {
+        //     Debug.LogWarning($"<color='yellow'>from {rot} to {currentRotation}</color>");
+        // }
     }
     /// <summary>
     /// 
     /// </summary>
     /// <param name="currentRotation"></param>
-    /// <param name="currup">rotation * Vector3.Up?? 不确定，是否当前旋转，再乘以90度（向上)？而且，和 Motor.CharacterUp 区别是？？ </param>
+    /// <param name="currup">== currRotation * Vector3.Up?? 已确定，是当前旋转，再乘以90度（向上)？而且，和 Motor.CharacterUp 应该是一样的 </param>
     public void DoRotateInGround(ref Quaternion currentRotation,Vector3 currUp,float deltaTime)
     {
         Vector3 initialCharacterHemiCenter = Motor.TransientPosition + (currUp * Motor.Capsule.radius);
         Vector3 smoothedGroundNormal = Vector3.Slerp(Motor.CharacterUp, Motor.GroundingStatus.GroundNormal,
             1 - Mathf.Exp(-BonusOrientationSharpness * deltaTime));
         currentRotation = Quaternion.FromToRotation(currUp, smoothedGroundNormal) * currentRotation;
+        //再一个自动转头向下
+        if (_vecHandle.stateRunUp == VecBase.VecINSlope.Up)
+        {
+            CharacterTurn.TurnLeft();
+        }else if (_vecHandle.stateRunUp == VecBase.VecINSlope.Down)
+        {
+            CharacterTurn.TurnRight();
+        }
+        else if (_vecHandle.stateRunUp == VecBase.VecINSlope.InGround)
+        {
+            CharacterTurn.TurnForward();
+        }
+
         // Move the position to create a rotation around the bottom hemi center instead of around the pivot
         Motor.SetTransientPosition(initialCharacterHemiCenter + (currentRotation * Vector3.down*Motor.Capsule.radius));
     }
@@ -398,15 +384,18 @@ public partial class MyIK : MonoBehaviour,ICharacterController
         //当速度做出改变，则说明“飞起”
         var h = currentVelocity.y * currentVelocity.y / (2 * Gravity.y); //Gravity 自定义，并且已带方向，所以最后要取绝对值
         h = Mathf.Abs(h);
-        _logFlyHeight = h;
+        FlyHeight = h;
         _logFlyStartPoint = Motor.transform.position;
         _logFlyStartVeclocity = currentVelocity;
-        _logFlyStartVeclocityFixed = DumpFixedFlyVec(currentVelocity);
-        
+      //  _logFlyStartVeclocityFixed = DumpFixedFlyVec(currentVelocity);
 
         return _logFlyStartVeclocityFixed;
     }
-
+    /// <summary>
+    /// 放到 vecBase.cs
+    /// </summary>
+    /// <param name="vec"></param>
+    /// <returns></returns>
     public Vector3 DumpFixedFlyVec(Vector3 vec)
     {
         //var vecProject = Vector3.ProjectOnPlane(vec, Vector3.right);//这个  Vector3.right 不准确，实际上是垂直于轨道切面的法线，所以也就是 CharacterUp
@@ -416,12 +405,17 @@ public partial class MyIK : MonoBehaviour,ICharacterController
     }
 
     public void UpdateVelocity(ref Vector3 currentVelocity, float deltaTime)
+    
     {
-        if(debugLog) Debug.LogWarning("UpdateVelocity");
-        // if(MyPlayer.Inst.IsControlling)
-        //     Debug.LogWarning("UpdateVelocity 一次,ground= " + Motor.GroundingStatus.IsStableOnGround + " FixedConsumed=" + _logFixedConsumed);
+        if (FlyCountDown > 0)
+        {
+            FlyCountDown--;
+        }
+
+//       if(debugLog) Debug.LogWarning("UpdateVelocity");
+
         
-        _vecHandle.HandleUpdate(ref currentVelocity,deltaTime);
+        _vecHandle.HandleUpdateVelocity(ref currentVelocity,deltaTime);
 
         //_logCurrentVelocity = currentVelocity;
 
@@ -469,10 +463,7 @@ public partial class MyIK : MonoBehaviour,ICharacterController
     public bool _isLastLand;
     public void PostGroundingUpdate(float deltaTime)
     {
-        if(debugLog) Debug.LogWarning("Update --- PostGroundingUpdate");
-        // if(MyPlayer.Inst.IsControlling)
-        //     Debug.LogError("PostGrounded一次，_isLastLand=" + _isLastLand  +" stable="+Motor.GroundingStatus.IsStableOnGround);
-        
+//        if(debugLog) Debug.LogWarning("Update --- PostGroundingUpdate");
         _vecHandle.HandlePostGround();
 //         //离地时
 //         if (_isLastLand == true && Motor.GroundingStatus.IsStableOnGround == false)
@@ -517,6 +508,23 @@ public partial class MyIK : MonoBehaviour,ICharacterController
     }
 
     //private Vector3 _characterLastNormal;
+    public bool BeforeCharacterSimulate1()
+    {
+        if (FlyCountDown > 0) 
+            return false;
+        
+        return true;
+    }
+
+    public bool BeforeCharacterGrounding()
+    {
+        
+        return true;
+    }
+
+    public void AfterCharacterGrounding()
+    {
+    }
 
     public void BeforeCharacterUpdate(float deltaTime)
     {
@@ -552,37 +560,27 @@ public partial class MyIK : MonoBehaviour,ICharacterController
         //     _logSwitchPoints.Add(Motor.transform.position);
         //     triggerLeaveTurnalConsume = true;
         // }  
-        
-        
 
-        switch (CurrentCharacterState)
+        if (AllowJumpingWhenSliding ? Motor.GroundingStatus.FoundAnyGround : Motor.GroundingStatus.IsStableOnGround)
         {
-            case CharacterState.Skate:
-            case CharacterState.Default:
+            // If we're on a ground surface, reset jumping values
+            if (!_jumpedThisFrame)
             {
-                if (AllowJumpingWhenSliding ? Motor.GroundingStatus.FoundAnyGround : Motor.GroundingStatus.IsStableOnGround)
-                {
-                    // If we're on a ground surface, reset jumping values
-                    if (!_jumpedThisFrame)
-                    {
-                        _jumpConsumed = false;
-                    }
-                    _timeSinceLastAbleToJump = 0f;
-                }
-                else
-                {
-                    // Keep track of time since we were last able to jump (for grace period)
-                    _timeSinceLastAbleToJump += deltaTime;
-                }
-                break;
+                _jumpConsumed = false;
             }
-
-                
+            _timeSinceLastAbleToJump = 0f;
         }
-        
-        
+        else
+        {
+            // Keep track of time since we were last able to jump (for grace period)
+            _timeSinceLastAbleToJump += deltaTime;
+        }
     }
-
+    /// <summary>
+    /// Grounding RaycastHit 时会触发的判断
+    /// </summary>
+    /// <param name="coll"></param>
+    /// <returns></returns>
     public bool IsColliderValidForCollisions(Collider coll)
     {
         //throw new System.NotImplementedException();
@@ -591,6 +589,7 @@ public partial class MyIK : MonoBehaviour,ICharacterController
 
     public void OnGroundHit(Collider hitCollider, Vector3 hitNormal, Vector3 hitPoint, ref HitStabilityReport hitStabilityReport)
     {
+        if(debugLog) Debug.LogWarning("OnGroundHit() hit=" + hitCollider.gameObject.name);
         //throw new System.NotImplementedException();
     }
     public class HitResult
@@ -600,12 +599,149 @@ public partial class MyIK : MonoBehaviour,ICharacterController
         public Vector3 pos;
     }
 
+
+    private bool consumeAfterAdvanceFunc;
+    void OnAfterAdvance(bool isSwitch)
+    {
+        if (consumeAfterAdvanceFunc) return; 
+        
+        consumeAfterAdvanceFunc = true;
+        Debug.LogError("OnAfterAdvance OnAfterAdvance OnAfterAdvance");
+        if (isSwitch) return;
+        DoStopGrindRail();
+    }
+
+    void DoStopGrindRail()
+    {
+        var spline = GetComponent<SplineController>();
+        if (spline != null)
+            spline.enabled = false;
+
+        Motor.enabled = true;
+        enabled = true;
+        
+        //重新设置位置。。。。。回到 IK 系统
+        // var point = VecHelper.Inst.GetGroundPosition(position);
+        // if (point != null)
+        //     Motor.SetPosition(point.Value);
+        Motor.SetPosition(transform.position);
+        
+        //恢复一下镜头
+        var chaseCam = Motor.gameObject.GetComponent<ChaseCam>();
+        if (chaseCam != null)
+            chaseCam.enabled = false;
+        MyPlayer.Inst.Cam.enabled = true;
+    }
+
+    float StartGrindPositionRadio(CurvySpline curvy)
+    {
+         ////////////////// 开始计算位置 ///////////////////
+            float minDistance = 999f;
+            Vector3 minPoint = Vector3.zero;
+            int minHitIndex = -1;
+            for (int i = 0; i < curvy.ControlPointsList.Count; i++)
+            {
+                var point = curvy.ControlPointsList[i];
+            //    AddLogSwitchPoint(point.transform.position);
+                if (i == curvy.ControlPointsList.Count - 1) break;
+                Vector3 BPosition = position;
+                Vector3 p1 = point.transform.position;
+                Vector3 p2 = curvy.ControlPointsList[i + 1].transform.position;
+                var p = CurvyHelper.Inst.CalNeastPointFixed(p1, p2, BPosition);
+                AddLogGreenPoint(p);
+                if (CurvyHelper.Inst.IsPointInLine(p1, p2, p))
+                {
+                    if ((BPosition-p).sqrMagnitude < minDistance)
+                    {
+                        minDistance = (BPosition-p).sqrMagnitude;
+                        minPoint = p;
+                        minHitIndex = i;
+                        
+                    }
+                }
+            }
+            AddLogSwitchPoint(minPoint);
+            //错误的方法
+            // for (int i = 0; i < curvy.Count; i++)
+            // {
+            //     AddLogSwitchPoint(curvy[i].transform.position);
+            //     var segment = curvy[i];
+            //     var segment2 = curvy[i + 1];
+            //     var p = CurvyHelper.Inst.CalNeastPoint(segment.transform.position, segment2.transform.position,
+            //         Motor.transform.position);
+            //     AddLogGreenPoint(p);    
+            // }
+            float lengthHitSegment=0;
+            float lengthTotal=0;
+            for (int i = 0; i < curvy.Count; i++)
+            {
+                if (i == minHitIndex)
+                    lengthHitSegment += (minPoint - curvy.ControlPointsList[i].transform.position).magnitude;
+                else if(i<minHitIndex)
+                    lengthHitSegment += curvy[i].Length;
+                
+                lengthTotal += curvy[i].Length;
+            }
+
+            return lengthHitSegment / lengthTotal;
+    }
+
+    void StartGrindRail(CurvySpline curvy)
+    {
+        Motor.enabled = false;
+        enabled = false;
+        
+        SplineController spline = GetComponent<SplineController>();
+        if (spline== null)
+        {
+            //////////////// 初始化和赋值 //////////////////////
+            spline = gameObject.AddComponent<SplineController>();
+            spline.Spline = curvy;
+            spline.Speed = ASkateConst.FirstGrindSpeed;
+            spline.Clamping = CurvyClamping.Clamp;
+            spline.AfterAdvance = OnAfterAdvance;
+           
+            
+            //AddLogSwitchPoint(point.transform.position);
+        }
+        else
+        {
+            consumeAfterAdvanceFunc = false;
+            spline.enabled = true;
+        }
+
+
+        spline.Position = StartGrindPositionRadio(curvy);
+        //        spline.Position = 0;//之前错误，一直导致为0
+        
+        //更新一下镜头
+        MyPlayer.Inst.Cam.enabled  =false;
+        var cam = MyPlayer.Inst.Cam;
+        var chaseCam = cam.gameObject.GetComponent<ChaseCam>();
+        if (chaseCam == null)
+        {
+            chaseCam = cam.gameObject.AddComponent<ChaseCam>();
+            chaseCam.LookAt = MyPlayer.Inst.CamFollowPoint;
+            chaseCam.MoveTo = MyPlayer.Inst.CamChaseMoveTo;//LookAt 和 RollTo 应该在尾部再后面一点
+            chaseCam.RollTo = MyPlayer.Inst.CamChaseMoveTo;
+        }
+
+        chaseCam.enabled = true;
+    }
+
     public List<HitResult> m_MovementHits = new List<HitResult>();
     public void OnMovementHit(Collider hitCollider, Vector3 hitNormal, Vector3 hitPoint,
         ref HitStabilityReport hitStabilityReport)
     {
-        
-        if(debugLog) Debug.LogWarning("OnMovementHit() 这个也是容易多次触发");
+        if(debugLog) Debug.LogWarning("<color='red'>OnMovementHit()</color> 这个也是容易多次触发 hit=" + hitCollider.gameObject.name);
+        //如果中了。。。。Curvy，则开始“上杆”
+        var curvy = hitCollider.GetComponent<CurvySpline>();
+        if (curvy != null)
+        {
+            StartGrindRail(curvy);
+            return;
+        }
+
         //if (fsm.IsState("Dead")) return;//所以需要限制条件。。。。\
         if(fsm.IsState("Reborn")) return;
         // //死亡判断- 判断死亡
@@ -688,82 +824,79 @@ public partial class MyIK : MonoBehaviour,ICharacterController
             cameraPlanarDirection = Vector3.ProjectOnPlane(inputs.CameraRotation * Vector3.up, Motor.CharacterUp).normalized;
         }
         Quaternion cameraPlanarRotation = Quaternion.LookRotation(cameraPlanarDirection, Motor.CharacterUp);
-
-        switch (CurrentCharacterState)
+        
+        
+        //case CharacterState.Skate:
         {
-            case CharacterState.Skate:
+            //_moveInputVector = cameraPlanarRotation * moveInputVector;
+            _lookInputVector = cameraPlanarRotation * moveInputVector;
+            //注意！！这个方法必须在Update()内调用
+            //要做摇杆也不好做
+            //直接在这里接手柄 插件，也不是不可以，到时再算吧
+            if (Input.GetKey(KeyCode.W))
             {
-                //_moveInputVector = cameraPlanarRotation * moveInputVector;
-                _lookInputVector = cameraPlanarRotation * moveInputVector;
-                //注意！！这个方法必须在Update()内调用
-                //要做摇杆也不好做
-                //直接在这里接手柄 插件，也不是不可以，到时再算吧
-                if (Input.GetKey(KeyCode.W))
+                if (fsm.IsState("RunCrouchRaise"))
                 {
-                    if (fsm.IsState("RunCrouchRaise"))
-                    {
-                        _moveInputVector = Vector3.zero;    //平地蹲下，没有速度
-                    }
-                    else
-                    {
-                        _moveInputVector = Motor.CharacterForward;//平地滑行，单脚速度
-                    }
+                    _moveInputVector = Vector3.zero;    //平地蹲下，没有速度
                 }
                 else
                 {
-                    _moveInputVector = Vector3.zero;    //没有操作，没有速度
+                    _moveInputVector = Motor.CharacterForward;//平地滑行，单脚速度
                 }
-
-                if (inputs.JumpDown)//还原Jump input(暂时其实还没需要滑板+跳跃）
-                {
-                    _timeSinceJumpRequested = 0f;
-                    _jumpRequested = true;
-                }
-
-                break;
             }
-            case CharacterState.Default:
-                {
-                    // Move and look inputs
-                    _moveInputVector = cameraPlanarRotation * moveInputVector;
-                    //Debug.LogError("Update every " +_moveInputVector);
-                    switch (OrientationMethod)
-                    {
-                        case OrientationMethod.TowardsCamera:
-                            _lookInputVector = cameraPlanarDirection;
-                            break;
-                        case OrientationMethod.TowardsMovement:
-                            _lookInputVector = _moveInputVector.normalized;
-                            break;
-                    }
+            else
+            {
+                _moveInputVector = Vector3.zero;    //没有操作，没有速度
+            }
 
-                    // Jumping input
-                    if (inputs.JumpDown)
-                    {
-                        _timeSinceJumpRequested = 0f;
-                        _jumpRequested = true;
-                    }
-
-                    // // Crouching input
-                    // if (inputs.CrouchDown)
-                    // {
-                    //     _shouldBeCrouching = true;
-                    //
-                    //     if (!_isCrouching)
-                    //     {
-                    //         _isCrouching = true;
-                    //         Motor.SetCapsuleDimensions(0.5f, 1f, 0.5f);
-                    //         MeshRoot.localScale = new Vector3(1f, 0.5f, 1f);
-                    //     }
-                    // }
-                    // else if (inputs.CrouchUp)
-                    // {
-                    //     _shouldBeCrouching = false;
-                    // }
-
-                    break;
-                }
+            if (inputs.JumpDown)//还原Jump input(暂时其实还没需要滑板+跳跃）
+            {
+                _timeSinceJumpRequested = 0f;
+                _jumpRequested = true;
+            }
         }
+        // case CharacterState.Default:
+        //     {
+        //         // Move and look inputs
+        //         _moveInputVector = cameraPlanarRotation * moveInputVector;
+        //         //Debug.LogError("Update every " +_moveInputVector);
+        //         switch (OrientationMethod)
+        //         {
+        //             case OrientationMethod.TowardsCamera:
+        //                 _lookInputVector = cameraPlanarDirection;
+        //                 break;
+        //             case OrientationMethod.TowardsMovement:
+        //                 _lookInputVector = _moveInputVector.normalized;
+        //                 break;
+        //         }
+        //
+        //         // Jumping input
+        //         if (inputs.JumpDown)
+        //         {
+        //             _timeSinceJumpRequested = 0f;
+        //             _jumpRequested = true;
+        //         }
+        //
+        //         // // Crouching input
+        //         // if (inputs.CrouchDown)
+        //         // {
+        //         //     _shouldBeCrouching = true;
+        //         //
+        //         //     if (!_isCrouching)
+        //         //     {
+        //         //         _isCrouching = true;
+        //         //         Motor.SetCapsuleDimensions(0.5f, 1f, 0.5f);
+        //         //         MeshRoot.localScale = new Vector3(1f, 0.5f, 1f);
+        //         //     }
+        //         // }
+        //         // else if (inputs.CrouchUp)
+        //         // {
+        //         //     _shouldBeCrouching = false;
+        //         // }
+        //
+        //         break;
+        //     }
+        
         
         //判断是否停止 或开始移动
         if (fsm.IsState("Dead")==false)

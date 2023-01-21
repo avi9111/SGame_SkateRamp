@@ -8,9 +8,9 @@ namespace ResKaifa.GameKit
     /// </summary>
     public class VecRookie:VecBase
     {
-        public override void HandleUpdate(ref Vector3 currentVelocity, float deltaTime)
+        public override void HandleUpdateVelocity(ref Vector3 currentVelocity, float deltaTime)
         {
-            base.HandleUpdate(ref currentVelocity, deltaTime);
+            base.HandleUpdateVelocity(ref currentVelocity, deltaTime);
         }
     }
 }

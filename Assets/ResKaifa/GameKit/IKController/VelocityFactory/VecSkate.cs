@@ -10,7 +10,7 @@ namespace ResKaifa.GameKit
     /// </summary>
     public class VecSkate:VecBase
     {
-        public override void HandleUpdate(ref Vector3 currentVelocity, float deltaTime)
+        public override void HandleUpdateVelocity(ref Vector3 currentVelocity, float deltaTime)
         {
             //in ground Movement
             if (_ik.Motor.GroundingStatus.IsStableOnGround)
@@ -78,22 +78,14 @@ namespace ResKaifa.GameKit
             
             if (_ik.Motor.LastGroundingStatus.IsStableOnGround && _ik.Motor.GroundingStatus.IsStableOnGround == false)
             {
-                //_logSpeedGround = Motor.GroundingStatus;
-                //_logSpeedGroundInner = Motor.GroundingStatus.InnerGroundNormal;
-                //_logSpeedGroundOutter = Motor.GroundingStatus.OuterGroundNormal;
-                //_logSpeedMotorPosition = Motor.GroundingStatus.GroundPoint;
-                //_logSpeedLastGroundPos = Motor.LastGroundingStatus.GroundPoint;
-                _ik._logFixedConsumed = false;
+              //  _ik._logFixedConsumed = false;
                 
                 Debug.LogWarning("设 m_StartLeaveGround 一次");
             }
             //接触地面时
             else if (_ik.Motor.LastGroundingStatus.IsStableOnGround== false && _ik.Motor.GroundingStatus.IsStableOnGround)
             {
-                _ik._logFixGroundedConsumed = false;
-                //landing....
-                //这里启动 awake()时也会触发一次
-//            Debug.LogError("接触地面时 ,打印落地shi速度：" + Motor.Velocity);
+               // _ik._logFixGroundedConsumed = false;
             }
 
           //  _isLastLand = Motor.GroundingStatus.IsStableOnGround;

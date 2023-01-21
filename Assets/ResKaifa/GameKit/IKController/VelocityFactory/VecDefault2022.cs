@@ -8,7 +8,7 @@ namespace ResKaifa.GameKit
     /// </summary>
     public class VecDefault2022:VecBase
     {
-        public override void HandleUpdate(ref Vector3 currentVelocity, float deltaTime)
+        public override void HandleUpdateVelocity(ref Vector3 currentVelocity, float deltaTime)
         {
             var Motor = _ik.Motor;
 
@@ -50,46 +50,46 @@ namespace ResKaifa.GameKit
                  
                  //注意！！这个离地的速度调整，和跳跃离地同时会触发
                  //所以会把向上跳的速度修正掉（现在 jumpDir = up * 2)
-                 if (!_ik._logFixedConsumed)//离地时刻
-                 {
-                     currentVelocity = Vector3.up * 22;//离地时，加一个很大的加速度（向上）
-                     
-                     _ik.RevertCamTrigger = true;
-                     _ik.onAirPaths = new List<Vector3>();
-                     _ik._logFixedConsumed = true;
-                     // _ik._logSpeedTangent = currentVelocity;
-                     // //_logSpeedProjection = Vector3.Project(currentVelocity, Vector3.up);
-                     // //currentVelocity += Vector3.up * currentVelocity.magnitude + Vector3.Project(currentVelocity, Vector3.up);
-                     // _ik._logSpeedProjection = Vector3.ProjectOnPlane(currentVelocity, Vector3.up);
-                     // // 减去向前的冲力是不严谨的，并不能处理内环轨道这种
-                     // // 但只要模型轨道末端的面片做成垂直向上或外翻一点都可支持（不内卷)
-                     // if (_ik.OnAirRotateMode == MyIK.WhileOnAirMode.Up)
-                     // {
-                     //     // 测试用,固定3个单位的高度，暂定:Vector3.up * 3f 
-                     //     currentVelocity += Vector3.up * 3f - Vector3.ProjectOnPlane(currentVelocity, Vector3.up);
-                     // }
-                     // else if (_ik.OnAirRotateMode == MyIK.WhileOnAirMode.GroundOutterNormal)
-                     // {
-                     //
-                     //     // forwardProj 和 Motor.CharacterForward 是 forward 是向前平面的投影，而 CharacterForward 是实时的世界矢量（动态的）
-                     //     //var forwardProj = Vector3.ProjectOnPlane(currentVelocity, Vector3.up);
-                     //     //跟进中。。。。。。               
-                     //     currentVelocity +=
-                     //         Vector3.ProjectOnPlane(currentVelocity, _ik.DumpGroundEdgeNormal())
-                     //             .normalized * 1.2f
-                     //         - Vector3.ProjectOnPlane(currentVelocity, Vector3.up);
-                     // }
-
-                     //_ik._logSpeedFixMoment = currentVelocity;
-                     MyPlayer.Inst.OnLeaveGround(currentVelocity);
-                 }
-                 else
-                 {
-                     
-                     // Gravity
-                     currentVelocity += _ik.Gravity * deltaTime;    
-                     
-                 }
+                 // if (!_ik._logFixedConsumed)//离地时刻
+                 // {
+                 //     currentVelocity = Vector3.up * 22;//离地时，加一个很大的加速度（向上）
+                 //     
+                 //     _ik.RevertCamTrigger = true;
+                 //     _ik.onAirPaths = new List<Vector3>();
+                 //     _ik._logFixedConsumed = true;
+                 //     // _ik._logSpeedTangent = currentVelocity;
+                 //     // //_logSpeedProjection = Vector3.Project(currentVelocity, Vector3.up);
+                 //     // //currentVelocity += Vector3.up * currentVelocity.magnitude + Vector3.Project(currentVelocity, Vector3.up);
+                 //     // _ik._logSpeedProjection = Vector3.ProjectOnPlane(currentVelocity, Vector3.up);
+                 //     // // 减去向前的冲力是不严谨的，并不能处理内环轨道这种
+                 //     // // 但只要模型轨道末端的面片做成垂直向上或外翻一点都可支持（不内卷)
+                 //     // if (_ik.OnAirRotateMode == MyIK.WhileOnAirMode.Up)
+                 //     // {
+                 //     //     // 测试用,固定3个单位的高度，暂定:Vector3.up * 3f 
+                 //     //     currentVelocity += Vector3.up * 3f - Vector3.ProjectOnPlane(currentVelocity, Vector3.up);
+                 //     // }
+                 //     // else if (_ik.OnAirRotateMode == MyIK.WhileOnAirMode.GroundOutterNormal)
+                 //     // {
+                 //     //
+                 //     //     // forwardProj 和 Motor.CharacterForward 是 forward 是向前平面的投影，而 CharacterForward 是实时的世界矢量（动态的）
+                 //     //     //var forwardProj = Vector3.ProjectOnPlane(currentVelocity, Vector3.up);
+                 //     //     //跟进中。。。。。。               
+                 //     //     currentVelocity +=
+                 //     //         Vector3.ProjectOnPlane(currentVelocity, _ik.DumpGroundEdgeNormal())
+                 //     //             .normalized * 1.2f
+                 //     //         - Vector3.ProjectOnPlane(currentVelocity, Vector3.up);
+                 //     // }
+                 //
+                 //     //_ik._logSpeedFixMoment = currentVelocity;
+                 //     MyPlayer.Inst.OnLeaveGround(currentVelocity);
+                 // }
+                 // else
+                 // {
+                 //     
+                 //     // Gravity
+                 //     currentVelocity += _ik.Gravity * deltaTime;    
+                 //     
+                 // }
                  Debug.LogError($"离地速度, {currentVelocity} total={currentVelocity.sqrMagnitude}");
                  
                  if (_ik.onAirPaths == null)

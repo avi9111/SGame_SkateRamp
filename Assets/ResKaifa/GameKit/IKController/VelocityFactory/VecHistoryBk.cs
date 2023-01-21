@@ -9,7 +9,7 @@ namespace ResKaifa.GameKit
     /// </summary>
     public class VecHistoryBk:VecBase
     {
-        public override void HandleUpdate(ref Vector3 currentVelocity, float deltaTime)
+        public override void HandleUpdateVelocity(ref Vector3 currentVelocity, float deltaTime)
         {
               var Motor = _ik.Motor;
               //in ground Movement

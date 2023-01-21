@@ -7,6 +7,8 @@ using PigeonCoopToolkit.Effects.Trails;
 using ResKaifa.GameKit;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Serialization;
+
 /// <summary>
 /// 应该是参考 Kinermatic 插件的 MyPlayer,但其实很多速度等功能都是“内聚”因为 MyIK.cs挺多处理的（Kinematic本身没做封装，只提供底层逻辑）;
 /// 现在多了些功能，例如 Presistant 记录调试好的速度，一些实现等。。。
@@ -25,6 +27,9 @@ public class MyPlayer : MonoBehaviour
         public Vector3 pos;
         public bool isGroundLogic;
     }
+
+    public static MyIK MyIK => Inst.CtlIK;
+
     [Header("滑板的物理调试")]
     public float UpSensitive = 3f;
     public List<MyPlayerPath> lstOfPath = new List<MyPlayerPath>();
@@ -34,6 +39,8 @@ public class MyPlayer : MonoBehaviour
     public KinematicCharacterMotor Motor => CtlIK.Motor;
 
     public Transform CamFollowPoint;
+    [FormerlySerializedAs("CamChaseLookAt")]
+    public Transform CamChaseMoveTo;
     private const string MouseXInput = "Mouse X";
     private const string MouseYInput = "Mouse Y";
     private const string MouseScrollInput = "Mouse ScrollWheel";
@@ -112,6 +119,7 @@ public class MyPlayer : MonoBehaviour
     /// </summary>
     public void ReDoStart()
     {
+        if (Cam == null) return;
         // Tell camera to follow transform
         Cam.SetFollowTransform(CamFollowPoint);
         Debug.Log("[Init]CameraFollowPointSet");
@@ -206,12 +214,13 @@ public class MyPlayer : MonoBehaviour
     /// <summary>
     /// 输入镜头 Loop
     /// </summary>
-    void HandleSkateCameraAutoInput()
+    public void HandleSkateCameraAutoInput()
     {
+        if(Cam ==null) return;
         //var targetDir = Vector3.ProjectOnPlane(Ctl.Motor.CharacterForward, Vector3.up);
         //var currDir = Vector3.ProjectOnPlane(Cam.Transform.forward, Vector3.up);
         var targetDir = Vector3.ProjectOnPlane(CtlIK.Motor.CharacterForward, CtlIK.Motor.CharacterUp);
-        var currDir = Vector3.ProjectOnPlane(Cam.Transform.forward, CtlIK.Motor.CharacterUp);
+        Vector3 currDir = Vector3.ProjectOnPlane(Cam.Transform.forward, CtlIK.Motor.CharacterUp);
         Vector3 mouseMove = Vector3.zero;
         float scrollInput = -Input.GetAxis(MouseScrollInput);
         currDir = Vector3.Lerp(currDir, targetDir, 1 - Mathf.Exp(-CamFollowSharpness * Time.deltaTime));
@@ -265,7 +274,12 @@ public class MyPlayer : MonoBehaviour
         // Build the CharacterInputs struct
         characterInputs.MoveAxisForward = Input.GetAxisRaw(VerticalInput) * VerticalSensity;
         characterInputs.MoveAxisRight = Input.GetAxisRaw(HorizontalInput);
-        characterInputs.CameraRotation = Cam.Transform.rotation;
+        if(Cam!=null)
+            characterInputs.CameraRotation = Cam.Transform.rotation;
+        else
+        {
+            characterInputs.CameraRotation = Quaternion.identity;
+        }
         characterInputs.JumpDown = Input.GetKeyDown(KeyCode.Space);
         characterInputs.CrouchDown = Input.GetKeyDown(KeyCode.C);//居然后蹲下？？？
         characterInputs.CrouchUp = Input.GetKeyUp(KeyCode.C);

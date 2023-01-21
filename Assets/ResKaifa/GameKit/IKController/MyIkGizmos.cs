@@ -10,30 +10,55 @@ using UnityEngine.Rendering.VirtualTexturing;
 
 public partial class MyIK : MonoBehaviour,ICharacterController
 {
+    public class MyIKRaycast {
+        public bool isClosest;
+        public RaycastHit hit;
+    }
+
     /// <summary>
     /// 记录离地点，所用，红色球
     /// </summary>
     private Vector3? _logSpeedLastGroundPos;
-    private Color hightlightYellow;
+    //private Color hightlightYellow;
+    
+    /// <summary>
+    /// 红色小球
+    /// </summary>
+    [NonSerialized]
     public List<Vector3> _logSwitchPoints = new List<Vector3>();
+    [NonSerialized]
+    private bool _logSwitchPointsConnect = true; 
+    /// <summary>
+    /// 绿色小球
+    /// </summary>
+    [NonSerialized]
     public List<Vector3> _logSwitchGreenPoints = new List<Vector3>();
     private Vector3 beforeUp;
     private Vector3 beforePosition;
     public int beforeUpAccumulate;
-    public Vector3 _logSlopeDir;
-
-    public float _logFlyHeight;
+  // public Vector3 _logSlopeDir;
+    [HideInInspector]
+    public int FlyCountDown;
+    [HideInInspector]
+    public float FlyHeight;
+    [HideInInspector]
     public Vector3 _logFlyStartPoint;
+    [HideInInspector]
     public Vector3 _logFlyStartVeclocityFixed;//修正速度
+    [HideInInspector]
     public Vector3 _logFlyStartVeclocity;//原速度
+
+    public float _logUpVelocityLen;
+    public Vector3 _logCurrVelocity;
+    public List<MyIKRaycast> _logGroundRaycasts = new List<MyIKRaycast>();
     public void InitGizmos()
     {
         _logSwitchPoints.Clear();
         _logSwitchGreenPoints.Clear();
-        if (ColorUtility.TryParseHtmlString("#FFC04C", out hightlightYellow) == false)
-        {
-            Debug.LogError("颜色 获取错误，请检查，必须带#号");
-        }
+        // if (ColorUtility.TryParseHtmlString("#FFC04C", out hightlightYellow) == false)
+        // {
+        //     Debug.LogError("颜色 获取错误，请检查，必须带#号");
+        // }
 
      //   hightlightYellow = Color.blue;
     }
@@ -63,7 +88,7 @@ public partial class MyIK : MonoBehaviour,ICharacterController
     }
 
 
-    Vector3 GetRampTangentNormal()
+    public Vector3 GetRampTangentNormal()
     {
         //return Motor.CharacterUp;
         //if not ok(whild testing)
@@ -73,7 +98,38 @@ public partial class MyIK : MonoBehaviour,ICharacterController
     }
 
     void OnDrawGizmos()
-     {
+    {
+        Vector3? lastPoint = null;
+        //---------------- 转折很大的点(也可以是各种测试点) ------------------
+        var color = Gizmos.color;
+        Gizmos.color = Color.green;
+         foreach (var point in _logSwitchGreenPoints)
+         {
+             GizmosTools.DrawWireSphere(point,Color.green);
+             
+             if (_logSwitchPointsConnect && lastPoint != null)
+             {
+                 //特殊测试，反向延长连线，需要知道落点是否在线上
+                 Gizmos.DrawLine(point, point + (lastPoint.Value - point));
+             }
+
+             lastPoint = point;
+         }
+
+         Gizmos.color = color;
+         lastPoint = null;
+         foreach (var point in _logSwitchPoints)
+         {
+             GizmosTools.DrawWireSphere(point,Color.red);
+             if (_logSwitchPointsConnect && lastPoint != null)
+             {
+                 //特殊测试，反向延长连线，需要知道落点是否在线上
+                 Gizmos.DrawLine(point, point + (lastPoint.Value - point) * 5);
+             }
+
+             lastPoint = point;
+         }
+         
          if (enabled == false) return;
          //------------------------- 上上 CharacterUp的谈黄色扇形） --------------------
          if (Motor != null)
@@ -115,23 +171,13 @@ public partial class MyIK : MonoBehaviour,ICharacterController
             // Gizmos.color = default;
             GizmosTools.DrawLine(transform1.position, transform1.position+Motor.CharacterForward, 10, Color.red);
             if(cc!=Vector3.zero)
-                GizmosTools.DrawLine(transform1.position,transform1.position+cc,10,GizmosTools.ColorBlue);
+                GizmosTools.DrawLine(transform1.position,transform1.position+cc,10,Color.yellow);//同仰角同步（应该只是中间变量）
             if(cf!=Vector3.zero)
                 GizmosTools.DrawLine(transform1.position,transform1.position+cf,2,GizmosTools.ColorGreen);
            // GizmosTools.DrawLine(transform1.position, transform1.position + lp, 10, Color.blue);
             //GizmosTools.DrawLine(transform1.position, transform1.position + rp, 10, Color.blue);
             GizmosTools.DrawLine(transform1.position, transform1.position + l * 0.9f, 10);
             GizmosTools.DrawLine(transform1.position, transform1.position + r * 0.9f, 10);
-         }
-         //---------------- 转折很大的点 ------------------
-         foreach (var point in _logSwitchPoints)
-         {
-             GizmosTools.DrawWireSphere(point,Color.red);
-         }
-
-         foreach (var point in _logSwitchGreenPoints)
-         {
-             GizmosTools.DrawWireSphere(point,Color.green);
          }
          
                       
@@ -154,9 +200,10 @@ public partial class MyIK : MonoBehaviour,ICharacterController
          //     }
          // }
          //
-         
+ 
+
          //------------------ 飞出轨道(离开轨道） ---------------------------- 
-         if (_logFlyHeight != 0)
+         if (FlyHeight != 0)
          {
              if (Motor != null)
              {
@@ -164,7 +211,7 @@ public partial class MyIK : MonoBehaviour,ICharacterController
                  var planeAixs = Vector3.Cross(planeRight, Vector3.up);
                  //var planeNorm = planeRight;
                  GizmosTools.DrawLine(_logFlyStartPoint, _logFlyStartPoint + Vector3.up * 2, 3,Color.red);
-                 var pUp = _logFlyStartPoint + new Vector3(0, _logFlyHeight, 0);
+                 var pUp = _logFlyStartPoint + new Vector3(0, FlyHeight, 0);
                  GizmosTools.DrawLine(_logFlyStartPoint, pUp, 5,
                      Color.gray);
          
@@ -187,6 +234,27 @@ public partial class MyIK : MonoBehaviour,ICharacterController
              }
          }
          
+         //------------ 测试速度和朝向 矢量 ----------------------------
+         if (Motor != null)
+         {
+             if (_showCurrVelocity)
+             {
+                 GizmosTools.DrawLine(Motor.transform.position, Motor.transform.position + _logCurrVelocity, 3,
+                     Color.blue);
+             }
+
+             if (_showCurrVelocityPillar)
+             {
+                 var dirOffset = Quaternion.AngleAxis(90, Vector3.up) * GetRampTangentNormal(); //人物后面的点，再旋转90度(左边）
+                 var posSide = Motor.transform.position + dirOffset;
+
+                 //GizmosTools.DrawLine(posSide,posSide + Vector3.up);
+                 if(_logUpVelocityLen>0)
+                    GizmosTools.DrawLine(posSide, posSide +new Vector3(0,1,0) * _logUpVelocityLen, 3f,Color.blue);
+                 else
+                    GizmosTools.DrawLine(posSide, posSide +new Vector3(0,1,0) * _logUpVelocityLen, 3f,GizmosTools.ColorBlue2);
+             }
+         }
          // //    var position = transform.position;
          // bool isDraw = false;
          // // if (_logSpeedTangent != Vector3.zero)
